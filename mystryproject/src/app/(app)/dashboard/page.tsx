@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
+import { CardHeader, CardContent, Card } from '@/components/ui/card';
 import { Message } from '@/model/user';
 import { ApiResponse } from '@/types/ApiResponse';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,10 +17,19 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { AcceptMessageSchema } from '@/schemas/acceptsMessageSchema';
 
+const specialChar = '||';
+
+const parseStringMessages = (messageString: string): string[] => {
+  return messageString.split(specialChar).filter(msg => msg.trim() !== '');
+};
+
 function UserDashboard() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSwitchLoading, setIsSwitchLoading] = useState(false);
+  const [suggestedMessages, setSuggestedMessages] = useState<string[]>([]);
+  const [isSuggestLoading, setIsSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
 
   const { toast } = useToast();
 
@@ -89,7 +99,6 @@ function UserDashboard() {
     if (!session || !session.user) return;
 
     fetchMessages();
-
     fetchAcceptMessages();
   }, [session, setValue, toast, fetchAcceptMessages, fetchMessages]);
 
@@ -113,6 +122,33 @@ function UserDashboard() {
           'Failed to update message settings',
         variant: 'destructive',
       });
+    }
+  };
+
+  const fetchSuggestedMessages = async () => {
+    setIsSuggestLoading(true);
+    setSuggestError(null);
+    try {
+      const response = await axios.get('/api/suggest-messages');
+      console.log('API Response:', response.data);
+      const messages = parseStringMessages(response.data);
+      console.log('Parsed messages:', messages);
+      setSuggestedMessages(messages);
+      toast({
+        title: 'Success',
+        description: 'Suggested messages loaded successfully!',
+        variant: 'default',
+      });
+    } catch (error) {
+      console.error('Error fetching suggested messages:', error);
+      setSuggestError('Failed to fetch suggested messages');
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch suggested messages',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSuggestLoading(false);
     }
   };
 
@@ -163,6 +199,54 @@ function UserDashboard() {
       </div>
       <Separator />
 
+      <div className="space-y-4 my-8">
+        <div className="space-y-2">
+          <Button
+            onClick={fetchSuggestedMessages}
+            className="my-4"
+            disabled={isSuggestLoading}
+          >
+            {isSuggestLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              'Get Suggested Messages'
+            )}
+          </Button>
+          <p>Click on any message below to copy it to your clipboard.</p>
+        </div>
+        <Card>
+          <CardHeader>
+            <h3 className="text-xl font-semibold">Suggested Messages</h3>
+          </CardHeader>
+          <CardContent className="flex flex-col space-y-4">
+            {suggestError ? (
+              <p className="text-red-500">{suggestError}</p>
+            ) : suggestedMessages.length > 0 ? (
+              suggestedMessages.map((message, index) => (
+                <Button
+                  key={index}
+                  variant="outline"
+                  className="mb-2 text-left justify-start h-auto p-3"
+                  onClick={() => {
+                    navigator.clipboard.writeText(message);
+                    toast({
+                      title: 'Message Copied!',
+                      description: 'Message has been copied to clipboard.',
+                    });
+                  }}
+                >
+                  {message}
+                </Button>
+              ))
+            ) : (
+              <p className="text-gray-500">No suggested messages yet. Click the button above to get some!</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Separator />
+
       <Button
         className="mt-4"
         variant="outline"
@@ -176,6 +260,7 @@ function UserDashboard() {
         ) : (
           <RefreshCcw className="h-4 w-4" />
         )}
+        Refresh Messages
       </Button>
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
         {messages.length > 0 ? (
